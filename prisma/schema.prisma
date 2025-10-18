@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  news      News[]
+}
+
+enum Role {
+  USER
+  ADMIN
+  TEACHER
+}
+
+model News {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id])
+  published Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  slug      String   @unique
+  thumbnail String?
+}
+
+model Lop {
+  Malop     String     @id
+  Tenlop    String?
+  Magv      String?
+  GVCN      Giaovien?  @relation("Lop_GVCN", fields: [Magv], references: [Magv])
+  Hocsinhs  Hocsinh[]
+  Giangdays Giangday[]
+  DiemRLs   DiemRL[]   @relation("Lop_DiemRL")
+}
+
+model Hocsinh {
+  Mahs     String   @id
+  Hotenhs  String
+  Diachi   String?
+  Ngaysinh DateTime
+  Gioitinh GioiTinh
+  Malop    String?
+  Lop      Lop?     @relation(fields: [Malop], references: [Malop])
+  Diems    Diem[]
+  DiemRLs  DiemRL[] @relation("Hocsinh_DiemRL")
+}
+
+model Giaovien {
+  Magv     String    @id
+  Hotengv  String
+  Ngaysinh DateTime?
+  Gioitinh GioiTinh?
+  SDT      String?
+  Email    String?   @unique
+
+  ChuNhiem    Lop[]      @relation("Lop_GVCN")
+  MonPhuTrach Monhoc[]
+  Giangdays   Giangday[]
+}
+
+model Monhoc {
+  Mamon    String    @id
+  Tenmon   String
+  Magv     String?
+  Giaovien Giaovien? @relation(fields: [Magv], references: [Magv])
+
+  Giangdays Giangday[]
+  Diems     Diem[]
+}
+
+model Giangday {
+  STT    Int   @id @default(autoincrement())
+  Namhoc Int
+  Hocky  Hocky
+
+  Magv  String
+  Malop String
+  Mamon String
+
+  Giaovien Giaovien @relation(fields: [Magv], references: [Magv])
+  Lop      Lop      @relation(fields: [Malop], references: [Malop])
+  Monhoc   Monhoc   @relation(fields: [Mamon], references: [Mamon])
+
+  Diems Diem[]
+
+  @@unique([Namhoc, Hocky, Magv, Malop, Mamon])
+}
+
+model Diem {
+  Madiem       Int           @id @default(autoincrement())
+  DiemTH       Float?
+  Diem15p      Float?
+  Diemmieng    Float?
+  Diemhs2      Float?
+  Diemhs3      Float?
+  Diemtbmon    Float?
+  Diemtbnam    Float?
+  Namhoc       Int
+  Hocky        Hocky
+  Mamon        String
+  Mahs         String
+  GiangdayId   Int?
+  Hocsinh      Hocsinh       @relation(fields: [Mahs], references: [Mahs])
+  Monhoc       Monhoc        @relation(fields: [Mamon], references: [Mamon])
+  Giangday     Giangday?     @relation(fields: [GiangdayId], references: [STT])
+  Chitietdiems Chitietdiem[]
+
+  @@unique([Mahs, Mamon, Namhoc, Hocky])
+}
+
+model Chitietdiem {
+  Machitietdiem Int   @id @default(autoincrement())
+  Diem          Float
+
+  Madiem  Int
+  DiemRef Diem @relation(fields: [Madiem], references: [Madiem], onDelete: Cascade)
+}
+
+enum GioiTinh {
+  NAM
+  NU
+  KHAC
+}
+
+enum Hocky {
+  HK1
+  HK2
+  HK_HE
+}
+
+model DiemRL {
+  id        Int      @id @default(autoincrement())
+  Mahs      String
+  Malop     String
+  Namhoc    Int
+  Hocky     Hocky
+  Diem      Int
+  Note      String?
+  createdBy String
+  createdAt DateTime @default(now())
+  Hocsinh   Hocsinh  @relation("Hocsinh_DiemRL", fields: [Mahs], references: [Mahs])
+  Lop       Lop      @relation("Lop_DiemRL", fields: [Malop], references: [Malop])
+
+  @@index([Malop, Namhoc, Hocky])
+  @@index([Mahs, Namhoc, Hocky])
+}
