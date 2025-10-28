@@ -1,6 +1,24 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { getMagvFromUserEmail } from './teacher.helper';
+
+function toYear(v: unknown) {
+  const n = typeof v === 'string' ? Number(v) : (v as number);
+  if (!Number.isInteger(n)) throw new BadRequestException('Năm học không hợp lệ');
+  return n;
+}
+
+function toDate(v: unknown) {
+  const d = new Date(v as string);
+  if (Number.isNaN(d.getTime())) throw new BadRequestException('Ngày sinh không hợp lệ');
+  return d;
+}
 
 @Injectable()
 export class TeacherService {
@@ -35,13 +53,13 @@ export class TeacherService {
     if (!lop) throw new NotFoundException('Lớp không tồn tại');
     if (lop.Magv !== Magv) throw new ForbiddenException('Không phải lớp chủ nhiệm của bạn');
 
-    // Ngaysinh trong schema là bắt buộc => yêu cầu client gửi
+    // Ngaysinh trong schema là bắt buộc
     return this.prisma.hocsinh.create({
       data: {
         Mahs: dto.Mahs,
         Hotenhs: dto.Hotenhs,
         Gioitinh: dto.Gioitinh,
-        Ngaysinh: new Date(dto.Ngaysinh),
+        Ngaysinh: toDate(dto.Ngaysinh),
         Diachi: dto.Diachi ?? null,
         Malop,
       },
@@ -62,7 +80,7 @@ export class TeacherService {
       data: {
         Hotenhs: dto.Hotenhs,
         Gioitinh: dto.Gioitinh,
-        Ngaysinh: dto.Ngaysinh ? new Date(dto.Ngaysinh) : hs.Ngaysinh,
+        Ngaysinh: dto.Ngaysinh ? toDate(dto.Ngaysinh) : hs.Ngaysinh,
         Diachi: dto.Diachi ?? hs.Diachi,
       },
     });
@@ -88,8 +106,8 @@ export class TeacherService {
       include: { Lop: true, Monhoc: true },
       orderBy: [{ Namhoc: 'desc' }, { Hocky: 'desc' }],
     });
-    // Trả về unique theo lớp + môn (có thể latest), hoặc để FE filter theo năm/học kỳ
-    return list.map(g => ({
+    // Trả về cho FE tự lọc theo năm/học kỳ
+    return list.map((g) => ({
       Malop: g.Malop,
       Tenlop: g.Lop?.Tenlop ?? g.Malop,
       Mamon: g.Mamon,
@@ -107,24 +125,47 @@ export class TeacherService {
   }
 
   // ----------- ĐIỂM RÈN LUYỆN (DRL) -----------
-  async getDRLByClass(userEmail: string, q: { Malop: string; Namhoc: number; Hocky: 'HK1'|'HK2'|'HK_HE' }) {
+  async getDRLByClass(
+    userEmail: string,
+    q: { Malop: string; Namhoc?: number | string; Hocky: 'HK1' | 'HK2' | 'HK_HE' },
+  ) {
     const Magv = await getMagvFromUserEmail(this.prisma, userEmail);
     const lop = await this.prisma.lop.findUnique({ where: { Malop: q.Malop } });
     if (!lop) throw new NotFoundException('Lớp không tồn tại');
     if (lop.Magv !== Magv) throw new ForbiddenException('Không phải lớp chủ nhiệm của bạn');
 
+    const where: Prisma.DiemRLWhereInput = {
+      Malop: q.Malop,
+      Hocky: q.Hocky,
+      ...(q.Namhoc !== undefined && q.Namhoc !== null ? { Namhoc: toYear(q.Namhoc) } : {}),
+    };
+
     const list = await this.prisma.diemRL.findMany({
-      where: { Malop: q.Malop, Namhoc: q.Namhoc, Hocky: q.Hocky },
+      where,
       include: { Hocsinh: true },
       orderBy: { id: 'desc' },
     });
-    return list.map(d => ({
-      id: d.id, Mahs: d.Mahs, Hotenhs: d.Hocsinh?.Hotenhs, Malop: d.Malop,
-      Nam: d.Namhoc, Hocky: d.Hocky, Diem: d.Diem, Note: d.Note,
+
+    return list.map((d) => ({
+      id: d.id,
+      Mahs: d.Mahs,
+      Hotenhs: d.Hocsinh?.Hotenhs,
+      Malop: d.Malop,
+      Nam: d.Namhoc,
+      Hocky: d.Hocky,
+      Diem: d.Diem,
+      Note: d.Note,
     }));
   }
 
-  async createDRL(userEmail: string, dto: { Mahs: string; Malop: string; Namhoc: number; Hocky: 'HK1'|'HK2'|'HK_HE'; Diem: number; Note?: string }) {
+  async createDRL(userEmail: string, dto: {
+    Mahs: string;
+    Malop: string;
+    Namhoc: number | string;
+    Hocky: 'HK1' | 'HK2' | 'HK_HE';
+    Diem: number;
+    Note?: string;
+  }) {
     const Magv = await getMagvFromUserEmail(this.prisma, userEmail);
     const lop = await this.prisma.lop.findUnique({ where: { Malop: dto.Malop } });
     if (!lop) throw new NotFoundException('Lớp không tồn tại');
@@ -137,7 +178,7 @@ export class TeacherService {
       data: {
         Mahs: dto.Mahs,
         Malop: dto.Malop,
-        Namhoc: dto.Namhoc,
+        Namhoc: toYear(dto.Namhoc),
         Hocky: dto.Hocky,
         Diem: dto.Diem,
         Note: dto.Note ?? null,
@@ -146,7 +187,18 @@ export class TeacherService {
     });
   }
 
-  async updateDRL(userEmail: string, id: number, dto: Partial<{ Mahs: string; Malop: string; Namhoc: number; Hocky: 'HK1'|'HK2'|'HK_HE'; Diem: number; Note: string }>) {
+  async updateDRL(
+    userEmail: string,
+    id: number,
+    dto: Partial<{
+      Mahs: string;
+      Malop: string;
+      Namhoc: number | string;
+      Hocky: 'HK1' | 'HK2' | 'HK_HE';
+      Diem: number;
+      Note: string;
+    }>,
+  ) {
     const Magv = await getMagvFromUserEmail(this.prisma, userEmail);
     const rec = await this.prisma.diemRL.findUnique({ where: { id } });
     if (!rec) throw new NotFoundException('DRL not found');
@@ -155,7 +207,7 @@ export class TeacherService {
     const lop = await this.prisma.lop.findUnique({ where: { Malop: rec.Malop } });
     if (!lop || lop.Magv !== Magv) throw new ForbiddenException();
 
-    // nếu đổi Mahs/Malop/Năm/HK, vẫn cần đảm bảo HS thuộc lớp và lớp thuộc GV
+    // nếu đổi Mahs/Malop/Năm/HK, vẫn đảm bảo HS thuộc lớp và lớp thuộc GV
     let Mahs = rec.Mahs;
     let Malop = rec.Malop;
     let Namhoc = rec.Namhoc;
@@ -166,18 +218,23 @@ export class TeacherService {
       if (!lop2 || lop2.Magv !== Magv) throw new ForbiddenException('Không phải lớp CN của bạn');
       Malop = dto.Malop;
     }
+
     if (dto.Mahs && dto.Mahs !== Mahs) {
       const hs2 = await this.prisma.hocsinh.findUnique({ where: { Mahs: dto.Mahs } });
       if (!hs2 || hs2.Malop !== Malop) throw new ForbiddenException('HS không thuộc lớp');
       Mahs = dto.Mahs;
     }
-    if (dto.Namhoc) Namhoc = dto.Namhoc;
-    if (dto.Hocky)  Hocky  = dto.Hocky;
+
+    if (dto.Namhoc !== undefined) Namhoc = toYear(dto.Namhoc);
+    if (dto.Hocky) Hocky = dto.Hocky;
 
     return this.prisma.diemRL.update({
       where: { id },
       data: {
-        Mahs, Malop, Namhoc, Hocky,
+        Mahs,
+        Malop,
+        Namhoc,
+        Hocky,
         Diem: dto.Diem ?? rec.Diem,
         Note: dto.Note ?? rec.Note,
       },
@@ -199,10 +256,9 @@ export class TeacherService {
     if (!hs) return [];
     if (!hs.Lop || hs.Lop.Magv !== Magv) throw new ForbiddenException('HS không thuộc lớp CN của bạn');
 
-    const list = await this.prisma.diemRL.findMany({
+    return this.prisma.diemRL.findMany({
       where: { Mahs },
       orderBy: [{ Namhoc: 'desc' }, { Hocky: 'desc' }],
     });
-    return list;
   }
 }
