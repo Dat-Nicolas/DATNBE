@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { NewsService } from './news.service';
@@ -20,8 +21,17 @@ export class NewsController {
   constructor(private readonly newsService: NewsService) {}
 
   @Get()
-  list() {
-    return this.newsService.list();
+  list(@Query('published') published?: string) {
+    const publishedBool =
+      typeof published === 'string'
+        ? published.toLowerCase() === 'true'
+        : undefined;
+    return this.newsService.list(publishedBool);
+  }
+
+  @Get('by-slug/:slug')
+  getBySlug(@Param('slug') slug: string) {
+    return this.newsService.getBySlug(slug);
   }
 
   @Get(':id')

@@ -14,4 +14,8 @@ export class CreateNewsDto {
   @IsOptional()
   @IsBoolean()
   published?: boolean = false;
+
+  @IsOptional()
+  @IsString()
+  thumbnail?: string;
 }
