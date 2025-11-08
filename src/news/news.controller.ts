@@ -1,20 +1,10 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  ParseIntPipe,
-  Patch,
-  Post,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { NewsService } from './news.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { UpdateNewsDto } from './dto/update-news.dto';
 import { GetUser } from '../common/decorators/get-user.decorator';
+import { SearchDto } from 'src/common/dto/search.dto';
 
 @Controller('news')
 export class NewsController {
@@ -23,10 +13,13 @@ export class NewsController {
   @Get()
   list(@Query('published') published?: string) {
     const publishedBool =
-      typeof published === 'string'
-        ? published.toLowerCase() === 'true'
-        : undefined;
+      typeof published === 'string' ? published.toLowerCase() === 'true' : undefined;
     return this.newsService.list(publishedBool);
+  }
+
+  @Get('search')
+  search(@Query() dto: SearchDto) {
+    return this.newsService.search(dto);
   }
 
   @Get('by-slug/:slug')
@@ -47,11 +40,7 @@ export class NewsController {
 
   @UseGuards(JwtAuthGuard)
   @Patch(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @GetUser() user: any,
-    @Body() dto: UpdateNewsDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @GetUser() user: any, @Body() dto: UpdateNewsDto) {
     return this.newsService.update(id, user.userId, dto);
   }
 

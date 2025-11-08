@@ -4,6 +4,7 @@ import { CreateLopDto } from './dto/create-lop.dto';
 import { UpdateLopDto } from './dto/update-lop.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { Roles } from 'src/auth/roles.decorator';
+import { SearchDto } from 'src/common/dto/search.dto';
 
 @Controller('lop')
 // @Roles('ADMIN')
@@ -33,5 +34,10 @@ export class LopController {
   @Delete(':Malop')
   remove(@Param('Malop') Malop: string) {
     return this.service.remove(Malop);
+  }
+
+  @Get('search')
+  search(@Query() dto: SearchDto) {
+    return this.service.search(dto);
   }
 }

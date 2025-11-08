@@ -31,15 +31,9 @@ async function main() {
   // ---------- USERS & NEWS ----------
   console.log('👤 Seed admin/author + news...');
   await prisma.user.upsert({
-    where: { email: 'admin@school.local' },
+    where: { email: 'admin@gmail.com' },
     update: { name: 'Admin', role: Role.ADMIN, password: await ahash('admin123') },
-    create: { email: 'admin@school.local', password: await ahash('admin123'), name: 'Admin', role: Role.ADMIN },
-  });
-
-  await prisma.user.upsert({
-    where: { email: 'gv1@truongabc.edu.vn' },
-    update: { name: 'Nguyễn Văn An', role: Role.TEACHER, password: await ahash('teacherGV001') },
-    create: { email: 'gv1@truongabc.edu.vn', password: await ahash('teacherGV001'), name: 'Nguyễn Văn An', role: Role.TEACHER },
+    create: { email: 'admin@gmail.com', password: await ahash('admin123'), name: 'Admin', role: Role.ADMIN },
   });
 
   const newsPayload = [
@@ -88,7 +82,7 @@ async function main() {
     Ngaysinh: new Date(1980 + i, 5, 15),
     Gioitinh: i % 2 === 0 ? GioiTinh.NAM : GioiTinh.NU,
     SDT: `090${i}12345`,
-    Email: `gv${i + 1}@truongabc.edu.vn`,
+    Email: `gv${i + 1}@gmail.com`,
   }));
   await prisma.giaovien.createMany({ data: gvData, skipDuplicates: true });
 
@@ -140,7 +134,7 @@ async function main() {
 
   // User cho học sinh
   await Promise.all(hsData.map(async hs => {
-    const email = `${hs.Mahs.toLowerCase()}@student.local`;
+    const email = `${hs.Mahs.toLowerCase()}@gmail.com`;
     const raw = `${hs.Mahs}${hs.Malop}`; // HS00110A1
     return prisma.user.upsert({
       where: { email },

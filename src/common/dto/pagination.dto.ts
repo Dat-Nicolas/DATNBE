@@ -17,3 +17,33 @@ export function toSkipTake({ page = 1, limit = 20 }: PaginationDto) {
   const skip = (Math.max(page, 1) - 1) * take;
   return { skip, take };
 }
+
+
+export type PaginatedResult<T> = {
+  data: T[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    sortBy: string;
+    order: 'asc' | 'desc';
+  };
+};
+
+export function buildPaginationMeta(
+  total: number,
+  page: number,
+  limit: number,
+  sortBy: string,
+  order: 'asc' | 'desc',
+) {
+  return {
+    page,
+    limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+    sortBy,
+    order,
+  };
+}
