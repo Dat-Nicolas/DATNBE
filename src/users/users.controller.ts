@@ -4,21 +4,32 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { SearchDto } from 'src/common/dto/search.dto';
+import { GetUser } from '../common/decorators/get-user.decorator';
+import { UpdateMeDto } from './dto/update-me.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Get()
-  findAll() {
-    return this.usersService.findAll();
+  @Get('me')
+  me(@GetUser() user: any) {
+    return this.usersService.getMe(user.userId);
   }
 
-  // Đặt /search trước /:id để dễ đọc (không bắt buộc)
+  @Patch('me')
+  updateMe(@GetUser() user: any, @Body() dto: UpdateMeDto) {
+    return this.usersService.updateMe(user.userId, dto);
+  }
+
   @Get('search')
   search(@Query() dto: SearchDto) {
     return this.usersService.search(dto);
+  }
+
+  @Get()
+  findAll() {
+    return this.usersService.findAll();
   }
 
   @Get(':id')
