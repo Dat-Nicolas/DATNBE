@@ -3,7 +3,7 @@ import {
   PrismaClient,
   GioiTinh,
   Hocky,
-  Role, // dùng enum Prisma để không lệch
+  Role,
   type Giangday as GiangdayModel,
   type Diem as DiemModel,
 } from '@prisma/client';
@@ -16,7 +16,9 @@ const rand = (min = 6, max = 10) =>
   Math.round((min + Math.random() * (max - min)) * 10) / 10;
 
 async function main() {
-  console.log('🌱 Reset database...');
+  console.log('🌱 Reset database (delete in dependency order)...');
+
+  // Xoá theo thứ tự phụ thuộc để sạch sẽ (dù đã có onDelete)
   await prisma.chitietdiem.deleteMany();
   await prisma.diem.deleteMany();
   await prisma.giangday.deleteMany();
@@ -25,17 +27,54 @@ async function main() {
   await prisma.monhoc.deleteMany();
   await prisma.lop.deleteMany();
   await prisma.giaovien.deleteMany();
+  await prisma.hocKy.deleteMany();
+  await prisma.namHoc.deleteMany();
   await prisma.news.deleteMany();
   await prisma.user.deleteMany();
 
-  // ---------- USERS & NEWS ----------
-  console.log('👤 Seed admin/author + news...');
-  await prisma.user.upsert({
+  // ---------- USERS ----------
+  console.log('👤 Seed admin user...');
+  const admin = await prisma.user.upsert({
     where: { email: 'admin@gmail.com' },
-    update: { name: 'Admin', role: Role.ADMIN, password: await ahash('admin123') },
-    create: { email: 'admin@gmail.com', password: await ahash('admin123'), name: 'Admin', role: Role.ADMIN },
+    update: {
+      name: 'Admin',
+      role: Role.ADMIN,
+      password: await ahash('admin123'),
+    },
+    create: {
+      email: 'admin@gmail.com',
+      password: await ahash('admin123'),
+      name: 'Admin',
+      role: Role.ADMIN,
+    },
+  });
+  const adminId = admin.id;
+
+  // ---------- NAM HOC & HOC KY ----------
+  console.log('📅 Seed Năm học + Học kỳ...');
+  const years = [
+    { code: 'NH2425', name: 'Năm học 2024-2025', active: true },
+    { code: 'NH2526', name: 'Năm học 2025-2026', active: false },
+  ];
+
+  await prisma.namHoc.createMany({
+    data: years,
+    skipDuplicates: true,
   });
 
+  const hocKyRows = [
+    { code: 'HK1-2425', name: 'Học kỳ I', yearCode: 'NH2425' },
+    { code: 'HK2-2425', name: 'Học kỳ II', yearCode: 'NH2425' },
+    { code: 'HK1-2526', name: 'Học kỳ I', yearCode: 'NH2526' },
+    { code: 'HK2-2526', name: 'Học kỳ II', yearCode: 'NH2526' },
+  ];
+  await prisma.hocKy.createMany({
+    data: hocKyRows,
+    skipDuplicates: true,
+  });
+
+  // ---------- NEWS ----------
+  console.log('📰 Seed News...');
   const newsPayload = [
     { title: 'Thông báo nghỉ Tết Dương lịch 2026', content: 'Toàn trường nghỉ từ ngày 30/12/2025 đến hết ngày 02/01/2026.', published: true, createdAt: '2025-10-13T21:42:59.996Z', updatedAt: '2025-10-13T21:42:59.996Z', slug: 'thong-bao-nghi-tet-duong-lich-2026', thumbnail: 'https://images.unsplash.com/photo-1516594798947-e65505dbb29d?auto=format&fit=crop&w=600&q=80' },
     { title: 'Hội thi giáo viên giỏi cấp trường', content: 'Công đoàn tổ chức hội thi giáo viên dạy giỏi với sự tham gia của 15 thầy cô.', published: true, createdAt: '2025-10-13T21:42:59.996Z', updatedAt: '2025-10-13T21:42:59.996Z', slug: 'hoi-thi-giao-vien-gioi', thumbnail: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=600&q=80' },
@@ -58,10 +97,19 @@ async function main() {
     { title: 'Cuộc thi sáng tạo khoa học kỹ thuật', content: 'Học sinh trường giành 3 giải cao trong cuộc thi KHKT cấp tỉnh.', published: true, createdAt: '2025-10-13T21:42:59.996Z', updatedAt: '2025-10-18T07:54:04.126Z', slug: 'cuoc-thi-sang-tao-khkt', thumbnail: 'https://images.unsplash.com/photo-1531306728370-e2ebd9d7bb99?auto=format&fit=crop&w=600&q=80' },
   ];
 
-  await Promise.all(newsPayload.map(n => prisma.news.upsert({
-    where: { slug: n.slug },
-    update: { title: n.title, content: n.content, published: n.published, thumbnail: n.thumbnail, updatedAt: new Date(n.updatedAt) },
-    create: {
+  await Promise.all(
+    newsPayload.map((n) =>
+      prisma.news.upsert({
+        where: { slug: n.slug },
+        update: {
+          title: n.title,
+          content: n.content,
+          published: n.published,
+          thumbnail: n.thumbnail,
+          updatedAt: new Date(n.updatedAt),
+          authorId: adminId,
+        },
+        create: {
           title: n.title,
           content: n.content,
           published: n.published,
@@ -69,16 +117,29 @@ async function main() {
           thumbnail: n.thumbnail,
           createdAt: new Date(n.createdAt),
           updatedAt: new Date(n.updatedAt),
-          authorId: 1,
+          authorId: adminId,
         },
-  })));
+      }),
+    ),
+  );
   console.log('📰 News ok');
 
   // ---------- GIÁO VIÊN ----------
-  console.log('👩‍🏫 Seed giáo viên...');
+  console.log('👩‍🏫 Seed giáo viên + user teacher...');
   const gvData = Array.from({ length: 10 }).map((_, i) => ({
     Magv: `GV${(i + 1).toString().padStart(3, '0')}`,
-    Hotengv: ['Nguyễn Văn An','Trần Thị Bình','Phạm Minh Đức','Lê Thu Hương','Võ Quốc Khánh','Đặng Văn Lợi','Bùi Thị Mai','Ngô Đức Nam','Hoàng Thị Oanh','Đỗ Quang Phúc'][i],
+    Hotengv: [
+      'Nguyễn Văn An',
+      'Trần Thị Bình',
+      'Phạm Minh Đức',
+      'Lê Thu Hương',
+      'Võ Quốc Khánh',
+      'Đặng Văn Lợi',
+      'Bùi Thị Mai',
+      'Ngô Đức Nam',
+      'Hoàng Thị Oanh',
+      'Đỗ Quang Phúc',
+    ][i],
     Ngaysinh: new Date(1980 + i, 5, 15),
     Gioitinh: i % 2 === 0 ? GioiTinh.NAM : GioiTinh.NU,
     SDT: `090${i}12345`,
@@ -86,18 +147,32 @@ async function main() {
   }));
   await prisma.giaovien.createMany({ data: gvData, skipDuplicates: true });
 
-  // User cho giáo viên
-  await Promise.all(gvData.map(async gv => prisma.user.upsert({
-    where: { email: gv.Email },
-    update: { name: gv.Hotengv, role: Role.TEACHER, password: await ahash(`teacher${gv.Magv}`) },
-    create: { email: gv.Email, password: await ahash(`teacher${gv.Magv}`), name: gv.Hotengv, role: Role.TEACHER },
-  })));
+  await Promise.all(
+    gvData.map(async (gv) =>
+      prisma.user.upsert({
+        where: { email: gv.Email! },
+        update: {
+          name: gv.Hotengv,
+          role: Role.TEACHER,
+          password: await ahash(`teacher${gv.Magv}`),
+        },
+        create: {
+          email: gv.Email!,
+          password: await ahash(`teacher${gv.Magv}`),
+          name: gv.Hotengv,
+          role: Role.TEACHER,
+        },
+      }),
+    ),
+  );
 
   // ---------- LỚP ----------
   console.log('🏫 Seed lớp...');
   await prisma.lop.createMany({
     data: Array.from({ length: 5 }).map((_, i) => ({
-      Malop: `10A${i + 1}`, Tenlop: `Lớp 10A${i + 1}`, Magv: `GV${(i + 1).toString().padStart(3, '0')}`,
+      Malop: `10A${i + 1}`,
+      Tenlop: `Lớp 10A${i + 1}`,
+      Magv: `GV${(i + 1).toString().padStart(3, '0')}`, // GVCN
     })),
     skipDuplicates: true,
   });
@@ -121,10 +196,16 @@ async function main() {
   });
 
   // ---------- HỌC SINH ----------
-  console.log('👨‍🎓 Seed học sinh...');
+  console.log('👨‍🎓 Seed học sinh + user student...');
   const hsData = Array.from({ length: 20 }).map((_, i) => ({
     Mahs: `HS${(i + 1).toString().padStart(3, '0')}`,
-    Hotenhs: ['Nguyễn Văn Hòa','Trần Thị Thu','Lê Đức Anh','Phạm Thanh Tùng','Vũ Thị Hoa','Đỗ Ngọc Linh','Ngô Minh Đức','Bùi Thị Lan','Hoàng Gia Huy','Phan Hải Yến','Phạm Mai Anh','Vũ Tiến Dũng','Nguyễn Hồng Quân','Trần Bảo Ngọc','Đào Minh Khang','Đinh Đức Long','Phạm Quỳnh Anh','Hoàng Minh Châu','Lý Thanh Tâm','Nguyễn Hải Đăng'][i],
+    Hotenhs: [
+      'Nguyễn Văn Hòa','Trần Thị Thu','Lê Đức Anh','Phạm Thanh Tùng',
+      'Vũ Thị Hoa','Đỗ Ngọc Linh','Ngô Minh Đức','Bùi Thị Lan',
+      'Hoàng Gia Huy','Phan Hải Yến','Phạm Mai Anh','Vũ Tiến Dũng',
+      'Nguyễn Hồng Quân','Trần Bảo Ngọc','Đào Minh Khang','Đinh Đức Long',
+      'Phạm Quỳnh Anh','Hoàng Minh Châu','Lý Thanh Tâm','Nguyễn Hải Đăng'
+    ][i],
     Diachi: `Phường ${i + 1}, Quận Hoàn Kiếm, Hà Nội`,
     Ngaysinh: new Date(2008, i % 12, 10 + (i % 15)),
     Gioitinh: i % 2 === 0 ? GioiTinh.NAM : GioiTinh.NU,
@@ -132,73 +213,114 @@ async function main() {
   }));
   await prisma.hocsinh.createMany({ data: hsData, skipDuplicates: true });
 
-  // User cho học sinh
-  await Promise.all(hsData.map(async hs => {
-    const email = `${hs.Mahs.toLowerCase()}@gmail.com`;
-    const raw = `${hs.Mahs}${hs.Malop}`; // HS00110A1
-    return prisma.user.upsert({
-      where: { email },
-      update: { name: hs.Hotenhs, role: Role.USER, password: await ahash(raw) },
-      create: { email, password: await ahash(raw), name: hs.Hotenhs, role: Role.USER },
-    });
-  }));
+  await Promise.all(
+    hsData.map(async (hs) => {
+      const email = `${hs.Mahs.toLowerCase()}@gmail.com`;
+      const raw = `${hs.Mahs}${hs.Malop}`; // HS00110A1
+      return prisma.user.upsert({
+        where: { email },
+        update: {
+          name: hs.Hotenhs,
+          role: Role.USER,
+          password: await ahash(raw),
+        },
+        create: {
+          email,
+          password: await ahash(raw),
+          name: hs.Hotenhs,
+          role: Role.USER,
+        },
+      });
+    }),
+  );
 
   // ---------- GIẢNG DẠY ----------
   console.log('📚 Seed giảng dạy...');
-  const years = [2025];
-  const subjects = ['TOAN','VAN','ANH','LY','HOA'] as const;
-  const classes = ['10A1','10A2','10A3','10A4','10A5'] as const;
-  const teachers = ['GV001','GV002','GV003','GV004','GV005'] as const;
+  // sử dụng năm học đang active = NH2425 -> Namhoc = 2025
+  const NamhocVal = 2025;
+  const subjects = ['TOAN', 'VAN', 'ANH', 'LY', 'HOA'] as const;
+  const classes = ['10A1', '10A2', '10A3', '10A4', '10A5'] as const;
+  const teachers = ['GV001', 'GV002', 'GV003', 'GV004', 'GV005'] as const;
+
   const gdList: GiangdayModel[] = [];
-  for (const Namhoc of years) {
-    for (let i = 0; i < 10; i++) {
-      const Hk = i % 2 === 0 ? Hocky.HK1 : Hocky.HK2;
-      const Magv = teachers[i % teachers.length];
-      const Malop = classes[i % classes.length];
-      const Mamon = subjects[i % subjects.length];
-      const gd = await prisma.giangday.create({ data: { Namhoc, Hocky: Hk, Magv, Malop, Mamon } });
-      gdList.push(gd);
-    }
+  for (let i = 0; i < 10; i++) {
+    const Hk = i % 2 === 0 ? Hocky.HK1 : Hocky.HK2;
+    const Magv = teachers[i % teachers.length];
+    const Malop = classes[i % classes.length];
+    const Mamon = subjects[i % subjects.length];
+    const gd = await prisma.giangday.create({
+      data: { Namhoc: NamhocVal, Hocky: Hk, Magv, Malop, Mamon },
+    });
+    gdList.push(gd);
   }
 
-  // ---------- ĐIỂM ----------
+  // ---------- ĐIỂM + CHI TIẾT ----------
   console.log('🧮 Seed điểm + chi tiết...');
-  const hsCodes = await prisma.hocsinh.findMany({ select: { Mahs: true, Malop: true } });
+  const hsCodes = await prisma.hocsinh.findMany({
+    select: { Mahs: true, Malop: true },
+  });
+
   const diemList: DiemModel[] = [];
   for (let i = 0; i < 20; i++) {
     const hs = hsCodes[i % hsCodes.length];
-    const Namhoc = 2025;
     const Hk = i % 2 === 0 ? Hocky.HK1 : Hocky.HK2;
     const Mamon = subjects[i % subjects.length];
-    const gd = gdList.find(g => g.Namhoc === Namhoc && g.Hocky === Hk && g.Mamon === Mamon && g.Malop === hs.Malop);
+    const gd = gdList.find(
+      (g) =>
+        g.Namhoc === NamhocVal &&
+        g.Hocky === Hk &&
+        g.Mamon === Mamon &&
+        g.Malop === hs.Malop
+    );
+
     const diem = await prisma.diem.create({
       data: {
-        Namhoc, Hocky: Hk, Mamon, Mahs: hs.Mahs,
-        DiemTH: rand(), Diem15p: rand(), Diemmieng: rand(), Diemhs2: rand(), Diemhs3: rand(),
-        Diemtbmon: rand(7,9), Diemtbnam: rand(7,9),
+        Namhoc: NamhocVal,
+        Hocky: Hk,
+        Mamon,
+        Mahs: hs.Mahs,
+        DiemTH: rand(),
+        Diem15p: rand(),
+        Diemmieng: rand(),
+        Diemhs2: rand(),
+        Diemhs3: rand(),
+        Diemtbmon: rand(7, 9),
+        Diemtbnam: rand(7, 9),
         GiangdayId: gd?.STT ?? null,
       },
     });
     diemList.push(diem);
   }
+
   for (const d of diemList) {
-    await prisma.chitietdiem.createMany({ data: [
-      { Madiem: d.Madiem, Diem: rand(6,10) },
-      { Madiem: d.Madiem, Diem: rand(6,10) },
-      { Madiem: d.Madiem, Diem: rand(6,10) },
-    ]});
+    await prisma.chitietdiem.createMany({
+      data: [
+        { Madiem: d.Madiem, Diem: rand(6, 10) },
+        { Madiem: d.Madiem, Diem: rand(6, 10) },
+        { Madiem: d.Madiem, Diem: rand(6, 10) },
+      ],
+    });
   }
 
   // ---------- ĐIỂM RÈN LUYỆN ----------
   console.log('🏅 Seed DRL...');
   const drlData = hsCodes.slice(0, 15).map((hs, i) => ({
-    Mahs: hs.Mahs, Malop: hs.Malop!, Namhoc: 2025,
+    Mahs: hs.Mahs,
+    Malop: hs.Malop!,
+    Namhoc: NamhocVal,
     Hocky: i % 2 === 0 ? Hocky.HK1 : Hocky.HK2,
-    Diem: 70 + (i % 30), Note: i % 3 === 0 ? 'Chăm chỉ, tích cực' : null, createdBy: 'system-seed',
+    Diem: 70 + (i % 30),
+    Note: i % 3 === 0 ? 'Chăm chỉ, tích cực' : null,
+    createdBy: 'system-seed',
   }));
   await prisma.diemRL.createMany({ data: drlData });
 
   console.log('✅ Seed hoàn tất!');
 }
 
-main().catch(e => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());

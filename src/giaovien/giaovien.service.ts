@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   buildPaginationMeta,
@@ -44,27 +44,67 @@ export class GiaovienService {
   }
 
   async update(Magv: string, dto: UpdateGiaovienDto) {
-    try {
-      const { Ngaysinh, ...rest } = dto;
-      return await this.prisma.giaovien.update({
+    const { Ngaysinh, ChuNhiemMalop, MonPhuTrachMamon, ...rest } = dto;
+
+    const exists = await this.prisma.giaovien.findUnique({ where: { Magv } });
+    if (!exists) throw new NotFoundException('Không tìm thấy giáo viên');
+
+    return this.prisma.$transaction(async (tx) => {
+      const gv = await tx.giaovien.update({
         where: { Magv },
         data: {
           ...rest,
           ...(Ngaysinh ? { Ngaysinh: new Date(Ngaysinh) } : {}),
         },
       });
-    } catch {
-      throw new NotFoundException('Không tìm thấy giáo viên');
-    }
+
+      if (typeof ChuNhiemMalop !== 'undefined') {
+        await tx.lop.updateMany({ where: { Magv }, data: { Magv: null } });
+
+        if (ChuNhiemMalop.length > 0) {
+          await tx.lop.updateMany({
+            where: { Malop: { in: ChuNhiemMalop } },
+            data: { Magv },
+          });
+        }
+      }
+
+      if (typeof MonPhuTrachMamon !== 'undefined') {
+        await tx.monhoc.updateMany({ where: { Magv }, data: { Magv: null } });
+
+        if (MonPhuTrachMamon.length > 0) {
+          await tx.monhoc.updateMany({
+            where: { Mamon: { in: MonPhuTrachMamon } },
+            data: { Magv },
+          });
+        }
+      }
+
+      return tx.giaovien.findUnique({
+        where: { Magv },
+        include: { ChuNhiem: true, MonPhuTrach: true, Giangdays: true },
+      });
+    });
   }
 
   async remove(Magv: string) {
-    try {
-      return await this.prisma.giaovien.delete({ where: { Magv } });
-    } catch {
-      throw new NotFoundException('Không tìm thấy giáo viên');
-    }
+  const exists = await this.prisma.giaovien.findUnique({ where: { Magv } });
+  if (!exists) throw new NotFoundException('Không tìm thấy giáo viên');
+
+  try {
+    return await this.prisma.$transaction(async (tx) => {
+      await tx.lop.updateMany({ where: { Magv }, data: { Magv: null } });
+
+      await tx.monhoc.updateMany({ where: { Magv }, data: { Magv: null } });
+
+      await tx.giangday.deleteMany({ where: { Magv } }); 
+
+      return tx.giaovien.delete({ where: { Magv } });
+    });
+  } catch (e: any) {
+    throw new ConflictException('Không thể xóa do còn ràng buộc dữ liệu (lớp/môn/giảng dạy).');
   }
+}
 
   async search(dto: SearchDto) {
     const {
@@ -79,7 +119,7 @@ export class GiaovienService {
       ? {
           OR: [
             { Magv: { contains: q, mode: 'insensitive' } },
-            { Hotengv: { contains: q, mode: 'insensitive' } }, 
+            { Hotengv: { contains: q, mode: 'insensitive' } },
             { Email: { contains: q, mode: 'insensitive' } },
           ],
         }

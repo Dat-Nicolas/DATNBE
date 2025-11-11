@@ -7,6 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/* ======================
+   AUTH / CMS
+====================== */
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
@@ -16,7 +19,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   news      News[]
-  avatarUrl String?  
+  avatarUrl String?
 }
 
 enum Role {
@@ -38,11 +41,33 @@ model News {
   thumbnail String?
 }
 
+/* ======================
+   HỆ THỐNG NĂM HỌC / HỌC KỲ
+====================== */
+model NamHoc {
+  code    String  @id
+  name    String
+  active  Boolean @default(false)
+  hocKys  HocKy[]
+}
+
+model HocKy {
+  code      String @id
+  name      String
+  yearCode  String
+  year      NamHoc @relation(fields: [yearCode], references: [code], onDelete: Cascade)
+
+  @@index([yearCode])
+}
+
+/* ======================
+   THỰC THỂ TRƯỜNG
+====================== */
 model Lop {
   Malop     String     @id
   Tenlop    String?
   Magv      String?
-  GVCN      Giaovien?  @relation("Lop_GVCN", fields: [Magv], references: [Magv])
+  GVCN      Giaovien?  @relation("Lop_GVCN", fields: [Magv], references: [Magv], onDelete: SetNull)
   Hocsinhs  Hocsinh[]
   Giangdays Giangday[]
   DiemRLs   DiemRL[]   @relation("Lop_DiemRL")
@@ -77,7 +102,7 @@ model Monhoc {
   Mamon    String    @id
   Tenmon   String
   Magv     String?
-  Giaovien Giaovien? @relation(fields: [Magv], references: [Magv])
+  Giaovien Giaovien? @relation(fields: [Magv], references: [Magv], onDelete: SetNull)
 
   Giangdays Giangday[]
   Diems     Diem[]
@@ -92,7 +117,7 @@ model Giangday {
   Malop String
   Mamon String
 
-  Giaovien Giaovien @relation(fields: [Magv], references: [Magv])
+  Giaovien Giaovien @relation(fields: [Magv], references: [Magv], onDelete: Cascade)
   Lop      Lop      @relation(fields: [Malop], references: [Malop])
   Monhoc   Monhoc   @relation(fields: [Mamon], references: [Mamon])
 
@@ -115,9 +140,10 @@ model Diem {
   Mamon        String
   Mahs         String
   GiangdayId   Int?
+
   Hocsinh      Hocsinh       @relation(fields: [Mahs], references: [Mahs])
   Monhoc       Monhoc        @relation(fields: [Mamon], references: [Mamon])
-  Giangday     Giangday?     @relation(fields: [GiangdayId], references: [STT])
+  Giangday     Giangday?     @relation(fields: [GiangdayId], references: [STT], onDelete: SetNull)
   Chitietdiems Chitietdiem[]
 
   @@unique([Mahs, Mamon, Namhoc, Hocky])

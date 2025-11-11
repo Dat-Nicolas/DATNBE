@@ -13,6 +13,8 @@ import { GiangdayModule } from './giangday/giangday.module';
 import { DiemModule } from './diem/diem.module';
 import { ChitietdiemModule } from './chitietdiem/chitietdiem.module';
 import { TeacherModule } from './teacher/teacher.module';
+import { NamHocModule } from './namhoc/namhoc.module';
+import { HocKyModule } from './hocky/hocky.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { TeacherModule } from './teacher/teacher.module';
     DiemModule,
     ChitietdiemModule,
     TeacherModule,
+    NamHocModule,
+    HocKyModule,
   ],
 })
 export class AppModule {}

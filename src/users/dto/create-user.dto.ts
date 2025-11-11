@@ -1,6 +1,6 @@
 import { IsEmail, IsIn, IsNotEmpty, MinLength } from 'class-validator';
 
-const ROLES = ['USER', 'ADMIN'] as const;
+const ROLES = ['USER', 'ADMIN' , 'TEACHER'] as const;
 type Role = (typeof ROLES)[number];
 
 export class CreateUserDto {
